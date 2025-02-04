@@ -169,16 +169,14 @@ impl PubSubClient {
         Ok(())
     }
 
-    pub async fn receive_message(&self) -> io::Result<()> {
+    pub async fn receive_message(&self) -> io::Result<Option<(String, String)>> {
         let buffer = self.client.receive_message().await?;
-
+    
         match self.parse_packet(&buffer) {
             Ok((topic, message)) => {
-                println!("Received topic: {}, message: {}", topic, message);
-                Ok(())
-            },
+                Ok(Some((topic, message)))
+            }
             Err(e) => {
-                eprintln!("Failed to parse message: {:?}", e);
                 Err(io::Error::new(io::ErrorKind::InvalidData, e))
             }
         }

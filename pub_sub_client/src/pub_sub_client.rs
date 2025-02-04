@@ -18,6 +18,7 @@ use tokio::io;
 use tokio::sync::RwLock;
 use tokio::time::{self, Duration};
 use bytes::{BytesMut, BufMut};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::collections::HashSet;
 use crate::tcp_client::TcpClient;
@@ -28,6 +29,7 @@ pub struct PubSubClient {
     client: TcpClient,
     subscriptions: Arc<RwLock<HashSet<String>>>,
     keep_alive_interval: u64,
+    last_message_sent: Arc<AtomicBool>,
 }
 
 impl PubSubClient {
@@ -38,6 +40,7 @@ impl PubSubClient {
             client,
             subscriptions: Arc::new(RwLock::new(HashSet::new())),
             keep_alive_interval,
+            last_message_sent: Arc::new(AtomicBool::new(false)),
         });
 
         if pubsub_client.keep_alive_interval > 0 {
@@ -64,7 +67,10 @@ impl PubSubClient {
         buffer.put(&message_size.to_be_bytes()[..]);
         buffer.put(message.as_bytes());
 
-        self.client.send_message(buffer).await
+        self.client.send_message(buffer).await?;
+        self.last_message_sent.store(true, Ordering::Relaxed);
+
+        Ok(())
     }
 
     pub async fn subscribe_to_topic(&self, topic: &str) -> io::Result<()> {
@@ -87,6 +93,7 @@ impl PubSubClient {
         buffer.put(&message_size.to_be_bytes()[..]);
 
         self.client.send_message(buffer).await?;
+        self.last_message_sent.store(true, Ordering::Relaxed);
 
         let mut subscriptions = self.subscriptions.write().await;
         subscriptions.insert(topic.to_string());
@@ -114,6 +121,7 @@ impl PubSubClient {
         buffer.put(&message_size.to_be_bytes()[..]);
 
         self.client.send_message(buffer).await?;
+        self.last_message_sent.store(true, Ordering::Relaxed);
 
         let mut subscriptions = self.subscriptions.write().await;
         subscriptions.remove(topic);
@@ -135,7 +143,10 @@ impl PubSubClient {
         buffer.put(&message_size.to_be_bytes()[..]);
         buffer.put(message.as_bytes());
     
-        self.client.send_message(buffer).await
+        self.client.send_message(buffer).await?;
+        self.last_message_sent.store(true, Ordering::Relaxed);
+
+        Ok(())
     }
 
     pub async fn send_response_message(&self, topic: &str, message: &str) -> io::Result<()> {
@@ -152,7 +163,10 @@ impl PubSubClient {
         buffer.put(&message_size.to_be_bytes()[..]);
         buffer.put(message.as_bytes());
     
-        self.client.send_message(buffer).await
+        self.client.send_message(buffer).await?;
+        self.last_message_sent.store(true, Ordering::Relaxed);
+
+        Ok(())
     }
 
     pub async fn receive_message(&self) -> io::Result<()> {
@@ -224,7 +238,12 @@ impl PubSubClient {
         loop {
             time::sleep(Duration::from_secs(self.keep_alive_interval)).await;
 
-            self.send_keep_alive_message().await.unwrap();
+            if !self.last_message_sent.load(Ordering::Relaxed) {
+                self.send_keep_alive_message().await.unwrap();
+            }
+
+            self.last_message_sent.store(false, Ordering::Relaxed);
         }
     }
 }
+

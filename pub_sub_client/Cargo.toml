@@ -1,0 +1,9 @@
+[package]
+name = "pub_sub_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.9.0"
+rand = "0.9.0"
+tokio = { version = "1.42.0", features = ["full"] }

@@ -9,6 +9,7 @@ This is a Pub/Sub (Publish/Subscribe) server implemented in Rust using asynchron
 - **Concurrency**: Built with `tokio` for handling multiple client connections concurrently.
 - **Configurable**: Server settings such as maximum clients, packet size, and timeouts are configurable.
 - **Pub/Sub Model**: Clients can subscribe to topics, unsubscribe, and publish messages to topics.
+- **Req/Res Model**: Clients communicate indirectly via the server (broker), where the server acts as a middleman to deliver messages between clients.
 - **Buffer Pool**: Efficient buffer management to reduce allocations for each client connection.
 
 ## Installation

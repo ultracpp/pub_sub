@@ -38,7 +38,7 @@ The server settings are managed through a `Settings.toml` file. Below are the co
 server_addr = "0.0.0.0:55001"  # The address on which the server will listen for incoming client connections.
 server_backlog = 128            # The maximum number of pending connections in the server's backlog.
 
-max_clients = 10240             # The maximum number of concurrent clients that the server can handle.
+max_clients = 1024             # The maximum number of concurrent clients that the server can handle.
 max_packet_size = 4096         # The maximum size (in bytes) of packets that the server can handle.
 
 timeout_wait = 60               # The timeout (in seconds) for waiting on client connections.

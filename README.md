@@ -21,13 +21,13 @@ To get started with this project, follow these steps:
 1. Clone the repository:
     ```bash
     git clone https://github.com/ultracpp/pub_sub.git
-    cd pub_sub.git
+    cd pub_sub/pub_sub_server
     ```
 
 2. Build and run the project:
     ```bash
     cargo build --release
-    cargo run
+    cargo run --release
     ```
 
 3. Configuration:

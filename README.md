@@ -43,6 +43,7 @@ max_packet_size = 4096         # The maximum size (in bytes) of packets that the
 
 timeout_wait = 60               # The timeout (in seconds) for waiting on client connections.
 timeout_read = 10               # The timeout (in seconds) for reading data from clients.
+```
 
 ## Usage
 

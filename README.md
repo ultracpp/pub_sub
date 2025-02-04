@@ -2,7 +2,9 @@
 
 ## Description
 
-This is a Pub/Sub (Publish/Subscribe) server implemented in Rust using asynchronous programming with `tokio`. The server allows multiple clients to subscribe to topics, publish messages to topics, and handle client requests. It is designed for scalability and performance, supporting a large number of concurrent connections and efficiently managing buffers.
+This is a Pub/Sub (Publish/Subscribe) server implemented in Rust using asynchronous programming with `tokio`. The server allows multiple clients to subscribe to topics, publish messages to topics, and handle client requests. It operates in a **Req/Res Model**, where clients communicate indirectly through the server (acting as a message broker). When a client sends a **request** message to the server, the server forwards the request to clients subscribed to the relevant topic, and the responding client sends a **response** back through the server.
+
+The server is designed for **scalability** and **performance**, supporting a large number of concurrent connections and efficiently managing buffers.
 
 ## Features
 

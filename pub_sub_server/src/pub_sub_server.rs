@@ -116,6 +116,7 @@ async fn handle_client(client_stream: Arc<ClientStream>, addr: SocketAddr) -> io
                                     2 => unsubscribe_to_topic(&addr, &topic).await,
                                     10 => request_topic(&addr, &topic, &message).await,
                                     11 => response_topic(&topic, &message).await,
+                                    99 => continue,
                                     _ => break,
                                 }
                             } else {

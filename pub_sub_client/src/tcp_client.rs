@@ -1,6 +1,6 @@
 /*
  * rust-pub-sub-client - A high-performance Pub/Sub client built with Rust
- * Copyright (c) 2024 Your Name
+ * Copyright (c) 2024 Eungsuk Jeon
  *
  * Licensed under the MIT License (the "License");
  * you may not use this file except in compliance with the License.

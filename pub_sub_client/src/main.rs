@@ -27,9 +27,18 @@ async fn main() {
     let pub_sub_client_clone = Arc::clone(&pub_sub_client);
     let receive_task = task::spawn(async move {
         loop {
-            if let Err(e) = pub_sub_client_clone.receive_message().await {
-                eprintln!("Error receiving message: {:?}", e);
-                break;
+            match pub_sub_client_clone.receive_message().await {
+                Ok(Some((topic, message))) => {
+                    println!("Received topic: {}, message: {}", topic, message);
+                }
+                Ok(None) => {
+                    eprintln!("No message received");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error receiving message: {:?}", e);
+                    break;
+                }
             }
         }
         pub_sub_client_clone.close().await;

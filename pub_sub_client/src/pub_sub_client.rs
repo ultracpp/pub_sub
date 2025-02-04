@@ -1,5 +1,5 @@
 /*
- * rust-pub-sub-server - A high-performance Pub/Sub server built with Rust
+ * rust-pub-sub-client - A high-performance Pub/Sub client built with Rust
  * Copyright (c) 2024 Your Name
  *
  * Licensed under the MIT License (the "License");

@@ -16,7 +16,6 @@ async fn read_user_input() -> io::Result<String> {
 #[tokio::main]
 async fn main() {
     let addr = "127.0.0.1:55001";
-    //let addr = "59.10.146.242:55001";
     let pub_sub_client = match PubSubClient::new(addr).await {
         Ok(client) => Arc::new(client),
         Err(e) => {

@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+use tokio::io;
 use tokio::sync::RwLock;
-use tokio::io::{self};
+use tokio::time::{self, Duration};
 use bytes::{BytesMut, BufMut};
 use std::sync::Arc;
 use std::collections::HashSet;
-
 use crate::tcp_client::TcpClient;
 
 const MAX_PACKET_SIZE: usize = 4096;
@@ -27,15 +27,27 @@ const MAX_PACKET_SIZE: usize = 4096;
 pub struct PubSubClient {
     client: TcpClient,
     subscriptions: Arc<RwLock<HashSet<String>>>,
+    keep_alive_interval: u64,
 }
 
 impl PubSubClient {
-    pub async fn new(addr: &str) -> io::Result<Self> {
+    pub async fn new(addr: &str, keep_alive_interval: u64) -> io::Result<Arc<Self>> {
         let client = TcpClient::new(addr).await?;
-        Ok(PubSubClient {
+        
+        let pubsub_client = Arc::new(PubSubClient {
             client,
             subscriptions: Arc::new(RwLock::new(HashSet::new())),
-        })
+            keep_alive_interval,
+        });
+
+        if pubsub_client.keep_alive_interval > 0 {
+            let client_clone = Arc::clone(&pubsub_client);
+            tokio::spawn(async move {
+                client_clone.start_keep_alive().await;
+            });
+        }
+
+        Ok(pubsub_client)
     }
 
     pub async fn send_pub_message(&self, topic: &str, message: &str) -> io::Result<()> {
@@ -61,7 +73,7 @@ impl PubSubClient {
             return Ok(());
         }
         drop(subscriptions);
-        
+
         let msg_type = 1u8;
         let topic_size = topic.len() as u8;
         let message_size = 0u32;
@@ -88,7 +100,7 @@ impl PubSubClient {
             return Ok(());
         }
         drop(subscriptions);
-        
+
         let msg_type = 2u8;
         let topic_size = topic.len() as u8;
         let message_size = 0u32;
@@ -125,7 +137,7 @@ impl PubSubClient {
     
         self.client.send_message(buffer).await
     }
-    
+
     pub async fn send_response_message(&self, topic: &str, message: &str) -> io::Result<()> {
         let msg_type = 11u8;
         let topic_size = topic.len() as u8;
@@ -185,5 +197,34 @@ impl PubSubClient {
 
     pub async fn close(&self) {
         self.client.close().await;
+    }
+
+    pub async fn send_keep_alive_message(&self) -> io::Result<()> {
+        println!("send_keep_alive_message");
+
+        let msg_type = 99u8;
+        let topic = "keep_alive";
+        let message = "alive";
+        let topic_size = topic.len() as u8;
+        let message_size = message.len() as u32;
+        let body_size = 2 + topic_size as u32 + 4 + message_size;
+
+        let mut buffer = BytesMut::with_capacity(MAX_PACKET_SIZE);
+        buffer.put(&body_size.to_be_bytes()[..]);
+        buffer.put(&msg_type.to_be_bytes()[..]);
+        buffer.put(&topic_size.to_be_bytes()[..]);
+        buffer.put(topic.as_bytes());
+        buffer.put(&message_size.to_be_bytes()[..]);
+        buffer.put(message.as_bytes());
+
+        self.client.send_message(buffer).await
+    }
+
+    pub async fn start_keep_alive(&self) {
+        loop {
+            time::sleep(Duration::from_secs(self.keep_alive_interval)).await;
+
+            self.send_keep_alive_message().await.unwrap();
+        }
     }
 }

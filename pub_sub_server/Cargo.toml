@@ -1,0 +1,15 @@
+[package]
+name = "pub_sub_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.9.0"
+chrono = "0.4.39"
+config = "0.15.7"
+dashmap = "6.1.0"
+lazy_static = "1.4.0"
+log = "0.4.25"
+log4rs = "1.3.0"
+once_cell = "1.19.0"
+tokio = { version = "1.42.0", features = ["full"] }

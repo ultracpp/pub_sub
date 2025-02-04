@@ -1,0 +1,8 @@
+server_addr = "0.0.0.0:55001"
+server_backlog = 128
+
+max_clients = 10240
+max_packet_size = 4096
+
+timeout_wait = 60
+timeout_read = 10

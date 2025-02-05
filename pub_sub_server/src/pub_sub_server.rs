@@ -226,29 +226,33 @@ async fn subscribe_to_topic(addr: &SocketAddr, topic: &str) {
 }
 
 async fn unsubscribe_to_topic(addr: &SocketAddr, topic: &str) {
-    let mut topics_lock = TOPICS.write().await;
+    {
+        let mut topics_lock = TOPICS.write().await;
 
-    if let Some(subscribers) = topics_lock.get_mut(topic) {
-        let mut subscribers_write = subscribers.write().await;
-        subscribers_write.remove(addr);
+        if let Some(subscribers) = topics_lock.get_mut(topic) {
+            let mut subscribers_write = subscribers.write().await;
+            subscribers_write.remove(addr);
 
-        let should_remove_topic = subscribers_write.is_empty();
+            let should_remove_topic = subscribers_write.is_empty();
 
-        drop(subscribers_write);
+            drop(subscribers_write);
 
-        if should_remove_topic {
-            topics_lock.remove(topic);
+            if should_remove_topic {
+                topics_lock.remove(topic);
+            }
         }
     }
 
-    let mut subscriptions_lock = SUBSCRIPTIONS.write().await;
-    if let Some(topics) = subscriptions_lock.get_mut(addr) {
-        topics.remove(topic);
+    {
+        let mut subscriptions_lock = SUBSCRIPTIONS.write().await;
+        if let Some(topics) = subscriptions_lock.get_mut(addr) {
+            topics.remove(topic);
 
-        let should_remove_client = topics.is_empty();
+            let should_remove_client = topics.is_empty();
 
-        if should_remove_client {
-            subscriptions_lock.remove(addr);
+            if should_remove_client {
+                subscriptions_lock.remove(addr);
+            }
         }
     }
 

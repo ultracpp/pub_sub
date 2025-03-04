@@ -18,6 +18,7 @@ use bytes::{Bytes, BytesMut};
 use config::Config;
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, HashSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
@@ -80,6 +81,64 @@ impl ClientStream {
     }
 }
 
+static WRITE_THREADS: Lazy<usize> = Lazy::new(|| CONFIG.get::<usize>("write_threads").unwrap_or_default());
+
+static WRITE_QUEUES: Lazy<Vec<Arc<Mutex<Vec<(SocketAddr, Bytes)>>>>> = Lazy::new(|| {
+    (0..*WRITE_THREADS)
+        .map(|_| Arc::new(Mutex::new(Vec::new())))
+        .collect()
+});
+
+pub async fn enqueue_message(addr: &SocketAddr, packet: Bytes) {
+    let index = get_thread_index(addr);
+    let queue = &WRITE_QUEUES[index];
+    let mut queue_lock = queue.lock().await;
+    queue_lock.push((*addr, packet));
+}
+
+fn get_thread_index(addr: &SocketAddr) -> usize {
+    let mut hasher = DefaultHasher::new();
+    format!("{}", addr).hash(&mut hasher);
+    (hasher.finish() as usize) % *WRITE_THREADS
+}
+
+pub async fn start_write_threads() {
+    for i in 0..*WRITE_THREADS {
+        let vec1 = Arc::clone(&WRITE_QUEUES[i]);
+        tokio::spawn(async move {
+            let mut vec2 = Vec::with_capacity(10000);
+
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+                {
+                    let mut vec1 = vec1.lock().await;
+                    std::mem::swap(&mut *vec1, &mut vec2);
+                }
+
+                if !vec2.is_empty() {
+                    log::info!("write_thread: {}", vec2.len());
+
+                    for (addr, packet) in &vec2 {
+                        if let Some(client) = CLIENTS.read().await.get(&addr) {
+                            let is_closed = *client.is_closed.read().await;
+                            if is_closed {
+                                continue;
+                            }
+    
+                            let mut writer = client.writer.lock().await;
+                            if let Err(e) = writer.write_all(&packet).await {
+                                log::warn!("Failed to send message to {}: {}", addr, e);
+                            }
+                        }
+                    }
+                    vec2.clear();
+                }
+            }
+        });
+    }
+}
+
 async fn handle_client(client_stream: Arc<ClientStream>, addr: SocketAddr) -> io::Result<()> {
     let mut buffer = BUFFER_POOL.get_buffer().await;
     
@@ -95,7 +154,7 @@ async fn handle_client(client_stream: Arc<ClientStream>, addr: SocketAddr) -> io
             buffer.resize(HEADER_SIZE, 0);
 
             let mut reader = client_stream.reader.lock().await;
-
+            
             match time::timeout(*TIMEOUT_WAIT, reader.read_exact(&mut buffer[..HEADER_SIZE])).await {
                 Ok(Ok(_)) => {
                     let body_size = u32::from_be_bytes(buffer[..HEADER_SIZE].try_into().unwrap()) as usize;
@@ -177,7 +236,9 @@ async fn publish_to_clients(topic: &str, message: &str) {
     for client in clients_lock.iter() {
         let packet = packet.clone();
 
-        if let Some(client_stream) = CLIENTS.read().await.get(client) {
+        enqueue_message(client, packet).await;
+
+        /*if let Some(client_stream) = CLIENTS.read().await.get(client) {
             let client_stream = Arc::clone(client_stream);
             
             tokio::spawn(async move {
@@ -190,7 +251,7 @@ async fn publish_to_clients(topic: &str, message: &str) {
                     log::warn!("Failed to send message to client: {}", e);
                 }
             });
-        }
+        }*/
     }
 }
 
@@ -280,7 +341,10 @@ async fn response_topic(topic: &str, message: &str) {
     };
 
     if let Some(client_addr) = client_addr {
-        let clients_read = CLIENTS.read().await;
+        let packet = Bytes::from(build_message_packet(topic, message));
+        enqueue_message(&client_addr, packet).await;
+        
+        /*let clients_read = CLIENTS.read().await;
 
         if let Some(client_stream) = clients_read.get(&client_addr) {
             let packet = Bytes::from(build_message_packet(topic, message));
@@ -289,7 +353,7 @@ async fn response_topic(topic: &str, message: &str) {
             if let Err(e) = writer.write_all(&packet).await {
                 log::warn!("Failed to send response to client {}: {}", client_addr, e);
             }
-        }
+        }*/
     } else {
         log::warn!("No active request found for topic: {}", topic);
     }
@@ -314,7 +378,13 @@ async fn remove_client(addr: &SocketAddr) {
     {
         let topics = {
             let mut subscriptions_lock = SUBSCRIPTIONS.write().await;
-            subscriptions_lock.remove(addr)
+            let topics = subscriptions_lock.remove(addr);
+
+            if subscriptions_lock.len() == 0 {
+                log::info!("SUBSCRIPTIONS clear");
+            }
+
+            topics
         };
     
         if let Some(topics) = topics {
@@ -335,6 +405,10 @@ async fn remove_client(addr: &SocketAddr) {
     
             for topic in topics_to_remove {
                 topics_lock.remove(&topic);
+            }
+
+            if topics_lock.len() == 0 {
+                log::info!("TOPICS clear");
             }
         }
     }
@@ -359,6 +433,8 @@ pub async fn server_run() -> io::Result<()> {
     let socket = TcpSocket::new_v4()?; socket.set_reuseaddr(true)?; socket.bind(addr)?;
     let listener = socket.listen(*SERVER_BACKLOG)?;
     log::info!("Listening on {}", addr);
+
+    start_write_threads().await;
 
     while let Ok((mut socket, addr)) = listener.accept().await {
         let clients_count = CLIENTS.read().await.len();

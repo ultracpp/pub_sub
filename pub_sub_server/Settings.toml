@@ -6,3 +6,5 @@ max_packet_size = 4096
 
 timeout_wait = 60
 timeout_read = 10
+
+write_threads = 4
